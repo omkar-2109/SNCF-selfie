@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile Camera with 3:4 Output in 1080x1920 Frame</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            text-align: center;
+        }
+        .camera-container {
+            position: relative;
+            width: 270px;
+            height: 480px;
+            overflow: hidden;
+            background-color: #000;
+            margin: 20px auto;
+            display: none;
+        }
+        #video-container {
+            position: absolute;
+            top: 100px; /* Adjusted to place below white overlay */
+            left: 0;
+            width: 100%;
+            height: calc(100% - 100px);
+            overflow: hidden;
+        }
+        #video {
+            width: 100%;
+            height: 100%; /* 3:4 ratio */
+            object-fit: cover;
+            transform: translateY(-12.5%); /* Center vertically */
+        }
+        #white-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100px;
+            background-color: white;
+            z-index: 1;
+        }
+        #frame-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            object-fit: contain;
+            z-index: 2;
+        }
+        #captureButton {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: white;
+            border: none;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            cursor: pointer;
+            z-index: 10;
+        }
+        #captureButton::before {
+            content: '';
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            right: 5px;
+            bottom: 5px;
+            border: 2px solid #000;
+            border-radius: 50%;
+        }
+        #nameForm {
+            margin-bottom: 20px;
+        }
+        input, button {
+            margin: 10px;
+            padding: 5px 10px;
+        }
+        #switchCameraButton {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.5);
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <form id="nameForm">
+            <input type="text" id="userName" placeholder="Enter your name" required>
+            <button type="submit">Start Camera</button>
+        </form>
+        <div class="camera-container">
+            <div id="white-overlay"></div>
+            <div id="video-container">
+                <video id="video" autoplay playsinline></video>
+            </div>
+            <img id="frame-overlay" src="frame.png" alt="Frame overlay">
+            <button id="captureButton"></button>
+            <button id="switchCameraButton">Switch Camera</button>
+        </div>
+    </div>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+        const nameForm = document.getElementById('nameForm');
+        const userNameInput = document.getElementById('userName');
+        const cameraContainer = document.querySelector('.camera-container');
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureButton = document.getElementById('captureButton');
+        const switchCameraButton = document.getElementById('switchCameraButton');
+        const frameOverlay = document.getElementById('frame-overlay');
+        const whiteOverlay = document.getElementById('white-overlay');
+        let stream;
+        let userName;
+        let currentFacingMode = 'environment';
+
+        nameForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            userName = userNameInput.value.trim();
+            if (userName) {
+                nameForm.style.display = 'none';
+                cameraContainer.style.display = 'block';
+                startCamera();
+            }
+        });
+
+        async function startCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: currentFacingMode,
+                        aspectRatio: 3/4,
+                        width: { ideal: 1080 },
+                        height: { ideal: 1440 }
+                    }
+                };
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+            } catch (err) {
+                console.error("Error accessing the camera", err);
+            }
+        }
+
+        switchCameraButton.addEventListener('click', () => {
+            currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+            startCamera();
+        });
+
+        function captureAndDownloadImage() {
+            const targetWidth = 1080;
+            const targetHeight = 1920;
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            const ctx = canvas.getContext('2d');
+            
+            // Fill the canvas with black background
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, targetWidth, targetHeight);
+            
+            // Draw the white overlay
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, targetWidth, 100 * (targetWidth / 270));
+            
+            // Calculate the size and position of the 3:4 video
+            const videoWidth = targetWidth;
+            const videoHeight = (targetWidth * 4) / 3;
+            const videoY = 100 * (targetWidth / 270);
+            
+            // Draw the video frame
+            ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, 0, videoY, videoWidth, videoHeight);
+            
+            // Draw the frame overlay
+            ctx.drawImage(frameOverlay, 0, 0, targetWidth, targetHeight);
+            
+            // Create a download link and trigger the download
+            const imageDataUrl = canvas.toDataURL('image/jpeg');
+            const downloadLink = document.createElement('a');
+            downloadLink.href = imageDataUrl;
+            downloadLink.download = `${userName}_powai.jpg`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
+
+        captureButton.addEventListener('click', captureAndDownloadImage);
+    </script>
+</body>
+</html>
